@@ -1,0 +1,20 @@
+{
+  "name": "playoff-rewatch-bot",
+  "version": "0.1.0",
+  "description": "Spoiler-free NBA playoff rewatch voting bot for Telegram",
+  "main": "src/bot.js",
+  "scripts": {
+    "test": "node --test",
+    "start": "node src/bot.js",
+    "refresh": "node src/scripts/refreshGames.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "better-sqlite3": "^12.9.0",
+    "dotenv": "^17.4.2",
+    "telegraf": "^4.16.3"
+  }
+}
