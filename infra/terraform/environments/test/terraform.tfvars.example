@@ -1,0 +1,5 @@
+aws_region          = "eu-central-1"
+name                = "playoff-rewatch-bot-test"
+telegram_bot_token  = "SET_IN_CI_OR_LOCAL_TFVARS"
+image_tag           = "latest"
+desired_count       = 1

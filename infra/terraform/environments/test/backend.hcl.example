@@ -1,0 +1,5 @@
+bucket         = "CHANGE_ME_tf_state_bucket"
+key            = "playoff-rewatch-bot/test/terraform.tfstate"
+region         = "eu-central-1"
+dynamodb_table = "CHANGE_ME_tf_locks"
+encrypt        = true

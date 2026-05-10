@@ -1,107 +1,91 @@
 # playoff-rewatch-bot
 
-Spoiler-free Telegram bot for NBA playoff rewatch decisions.
+Spoiler-safe Telegram bot for NBA playoff rewatch communities.
 
-## MVP Features
+## MVP capabilities
 
-- `/today` → lists today's playoff games (no score shown) + inline vote buttons
-- `/game <id>` → spoiler-free game details
-- `/vote <id> <up|down|fire>` → manual vote command
-- inline votes (`👍 / 👎 / 🔥`) under each game
-- `/activity <id>` → vote counts + comment count + rank score
-- `/comment <id> <text>` → lightweight game discussion with activity tracking
-- SQLite storage (`better-sqlite3`)
-- Daily importer script for playoff games from ESPN public endpoint
-- Basic tests for ranking and spoiler filtering helpers
+- Community isolation with **spaces** (create/join/switch)
+- Daily spoiler-safe feeds:
+  - `/today`
+  - `/tomorrow`
+- Per-game interaction scoped to active space:
+  - `/game <id>`
+  - `/vote <id> <up|down|fire>` (or inline buttons)
+  - `/activity <id>`
+  - `/comment <id> <text>`
+- Game cards intentionally hide scores/results and show counters only:
+  - votes (👍/👎/🔥)
+  - comments (💬)
 
-UX is concise and mixed DE/EN friendly.
+## Space commands
 
----
+- `/space_create <name>` create a new space and become owner
+- `/space_join <JOIN_CODE>` join a space by code
+- `/spaces` list your spaces and active one
+- `/space_use <slug|id>` switch active space
 
-## Stack
-
-- Node.js (CommonJS)
-- [Telegraf](https://telegraf.js.org/)
-- SQLite via `better-sqlite3`
-- Data source: ESPN NBA scoreboard API (no key required)
-
----
-
-## Quick Start
+## Local development
 
 ```bash
 git clone https://github.com/kralle-der-boss/playoff-rewatch-bot.git
 cd playoff-rewatch-bot
 npm install
 cp .env.example .env
-# fill TELEGRAM_BOT_TOKEN
-npm run refresh
+# set TELEGRAM_BOT_TOKEN
+npm run refresh:window
 npm start
 ```
 
-Bot starts polling immediately.
+## Scheduler-friendly automation
 
----
+- Refresh one day:
+  ```bash
+  npm run refresh
+  # or: node src/scripts/refreshGames.js 2026-05-10
+  ```
+- Refresh today + tomorrow window:
+  ```bash
+  npm run refresh:window
+  # or: node src/scripts/refreshWindow.js 2026-05-10
+  ```
 
-## Commands
-
-- `/today`
-- `/game <id>`
-- `/vote <id> <up|down|fire>`
-- `/activity <id>`
-- `/comment <id> <text>`
-
-### Ranking Formula
-
-`rank = up*2 + fire*3 - down + comments*0.5 + uniqueVoters*0.5`
-
----
-
-## Daily Refresh (cron-friendly)
-
-Manual:
-
-```bash
-npm run refresh
-# or specific date
-node src/scripts/refreshGames.js 2026-05-10
-```
-
-Cron example (every morning 09:00):
+Cron example:
 
 ```cron
-0 9 * * * cd /path/to/playoff-rewatch-bot && /usr/bin/env bash -lc 'npm run refresh >> refresh.log 2>&1'
+0 8 * * * cd /path/to/playoff-rewatch-bot && /usr/bin/env bash -lc 'npm run refresh:window >> refresh.log 2>&1'
 ```
 
----
+## Infrastructure (Terraform)
 
-## Environment
+Terraform is structured for test/prod with remote-state-ready backend:
 
-`.env`:
+- `infra/terraform/environments/test`
+- `infra/terraform/environments/prod`
+- shared module: `infra/terraform/modules/bot_service`
 
-```ini
-TELEGRAM_BOT_TOKEN=...
-DB_PATH=./data/app.db
-```
+Each environment uses S3 backend + DynamoDB lock pattern via `backend.hcl`.
 
-Required keys:
+## CI/CD (GitHub Actions)
 
-- `TELEGRAM_BOT_TOKEN` (from @BotFather)
+- `.github/workflows/ci.yml` → test + lint
+- `.github/workflows/terraform-plan.yml` → fmt/validate/plan (OIDC)
+- `.github/workflows/terraform-apply.yml` → manual apply (OIDC)
 
-No NBA API key required for current ESPN source.
+No long-lived AWS keys are stored in this repository.
 
----
+## Required configuration by repo admin
 
-## Tests
+Set GitHub environment vars/secrets per env (`test`, `prod`):
+
+- Vars: `AWS_REGION`, `SERVICE_NAME`, `TF_STATE_BUCKET`, `TF_LOCK_TABLE`
+- Optional vars: `IMAGE_TAG`, `DESIRED_COUNT`
+- Secrets: `AWS_ROLE_ARN`, `TELEGRAM_BOT_TOKEN`
+
+See `docs/deployment-runbook.md` for bootstrap and rollback.
+
+## Test
 
 ```bash
+npm run lint
 npm test
 ```
-
----
-
-## Notes
-
-- Bot intentionally hides scores/results in regular outputs.
-- ESPN payload still includes scores internally in raw JSON for debugging, but user-facing messages stay spoiler-free.
-- MVP scope: bot-managed comments (`/comment`) as per-game discussion mode.

@@ -1,0 +1,46 @@
+name: terraform-apply
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to apply'
+        required: true
+        type: choice
+        options: [test, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Write backend.hcl
+        run: |
+          cat > infra/terraform/environments/${{ inputs.environment }}/backend.hcl <<'EOF'
+          bucket         = "${{ vars.TF_STATE_BUCKET }}"
+          key            = "playoff-rewatch-bot/${{ inputs.environment }}/terraform.tfstate"
+          region         = "${{ vars.AWS_REGION }}"
+          dynamodb_table = "${{ vars.TF_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+      - name: Terraform init
+        run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} init -backend-config=backend.hcl
+      - name: Terraform apply
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_name: ${{ vars.SERVICE_NAME }}
+          TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TF_VAR_image_tag: ${{ vars.IMAGE_TAG || 'latest' }}
+          TF_VAR_desired_count: ${{ vars.DESIRED_COUNT || 1 }}
+        run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} apply -auto-approve

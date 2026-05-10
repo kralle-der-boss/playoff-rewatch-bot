@@ -1,0 +1,56 @@
+name: terraform-plan
+
+on:
+  pull_request:
+    paths:
+      - 'infra/terraform/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to plan'
+        required: true
+        type: choice
+        options: [test, prod]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        env: [test, prod]
+    environment: ${{ matrix.env }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+      - name: Terraform fmt check
+        run: terraform -chdir=infra/terraform/environments/${{ matrix.env }} fmt -check -recursive
+      - name: Write backend.hcl
+        run: |
+          cat > infra/terraform/environments/${{ matrix.env }}/backend.hcl <<'EOF'
+          bucket         = "${{ vars.TF_STATE_BUCKET }}"
+          key            = "playoff-rewatch-bot/${{ matrix.env }}/terraform.tfstate"
+          region         = "${{ vars.AWS_REGION }}"
+          dynamodb_table = "${{ vars.TF_LOCK_TABLE }}"
+          encrypt        = true
+          EOF
+      - name: Terraform init
+        run: terraform -chdir=infra/terraform/environments/${{ matrix.env }} init -backend-config=backend.hcl
+      - name: Terraform validate
+        run: terraform -chdir=infra/terraform/environments/${{ matrix.env }} validate
+      - name: Terraform plan
+        env:
+          TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+          TF_VAR_name: ${{ vars.SERVICE_NAME }}
+          TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TF_VAR_image_tag: ${{ vars.IMAGE_TAG || 'latest' }}
+          TF_VAR_desired_count: ${{ vars.DESIRED_COUNT || 1 }}
+        run: terraform -chdir=infra/terraform/environments/${{ matrix.env }} plan -out=tfplan

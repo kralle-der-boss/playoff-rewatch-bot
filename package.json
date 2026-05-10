@@ -5,8 +5,10 @@
   "main": "src/bot.js",
   "scripts": {
     "test": "node --test",
+    "lint": "node --check src/bot.js src/lib/*.js src/scripts/*.js",
     "start": "node src/bot.js",
-    "refresh": "node src/scripts/refreshGames.js"
+    "refresh": "node src/scripts/refreshGames.js",
+    "refresh:window": "node src/scripts/refreshWindow.js"
   },
   "keywords": [],
   "author": "",
