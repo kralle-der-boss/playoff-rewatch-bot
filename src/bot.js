@@ -12,6 +12,65 @@ if (!token) throw new Error('Missing TELEGRAM_BOT_TOKEN in env');
 
 const bot = new Telegraf(token);
 
+function buildStartMessage(space) {
+  const lines = [
+    'Relive Club is a spoiler-free NBA playoff rewatch bot.',
+    'Use it with friends to find the best playoff games to watch later without seeing scores first.',
+    '',
+    'What you do here:',
+    "- /today and /tomorrow show the playoff slate without results",
+    '- vote and comment so your space can surface the best rewatch picks',
+    '- /activity <id> shows where the hype is',
+  ];
+
+  if (space) {
+    lines.push('', `You are currently in #${space.slug}. Start with /today.`);
+  } else {
+    lines.push('', 'Get started with /space_create <name> or /space_join <JOIN_CODE>.');
+  }
+
+  return lines.join('\n');
+}
+
+function buildSpaceWelcomeMessage(space, options = {}) {
+  const lines = [];
+
+  if (options.created) {
+    lines.push(`✅ Space created: ${space.name} (#${space.slug})`);
+    lines.push(`Join code: ${space.join_code}`);
+    lines.push('Share that code so friends can join with /space_join <JOIN_CODE>.');
+  } else {
+    lines.push(`✅ Welcome to ${space.name} (#${space.slug})`);
+  }
+
+  lines.push(
+    '',
+    'This is your spoiler-free NBA playoff rewatch space.',
+    'Use it to compare notes with friends, vote on what is worth rewatching, and stay clear of final scores.',
+    '',
+    'Try this next:',
+    "- /today for today's slate",
+    "- /tomorrow for tomorrow's slate",
+    '- tap the vote buttons or use /vote <id> <up|down|fire>',
+    '- use /comment <id> <text> and /activity <id> to see what the room is excited about'
+  );
+
+  return lines.join('\n');
+}
+
+function buildGroupWelcomeMessage(members) {
+  const names = members.map((member) => member.first_name || member.username || 'friend').join(', ');
+
+  return [
+    `Welcome ${names}!`,
+    'Relive Club is a spoiler-free NBA playoff rewatch bot for the group.',
+    'The idea is simple: check the playoff slate without seeing scores, vote on what is worth rewatching, and add hype/comments with everyone else here.',
+    '',
+    'Start with /today or /tomorrow.',
+    'If you need the full setup or commands, send the bot /start in a direct chat.',
+  ].join('\n');
+}
+
 async function ensureDailyGames(dateStr) {
   let games = getGamesByDate(dateStr);
   if (games.length === 0) {
@@ -64,18 +123,23 @@ async function sendFeed(ctx, date, label) {
   }
 }
 
-bot.start((ctx) =>
-  ctx.reply(
-    '🏀 Spoiler-free NBA Rewatch Bot\nUse spaces to keep communities isolated.\nCommands: /space_create, /space_join, /spaces, /space_use, /today, /tomorrow, /game, /vote, /activity, /comment'
-  )
-);
+bot.start((ctx) => ctx.reply(buildStartMessage(resolveActiveSpace(String(ctx.from.id)))));
+
+bot.on('message', (ctx, next) => {
+  if (!['group', 'supergroup'].includes(ctx.chat?.type || '')) return next();
+
+  const newMembers = (ctx.message?.new_chat_members || []).filter((member) => !member.is_bot);
+  if (newMembers.length === 0) return next();
+
+  return ctx.reply(buildGroupWelcomeMessage(newMembers));
+});
 
 bot.command('space_create', (ctx) => {
   const name = ctx.message.text.split(/\s+/).slice(1).join(' ').trim();
   if (!name) return ctx.reply('Usage: /space_create <name>');
 
   const space = createSpace(name, ctx.from);
-  return ctx.reply(`✅ Space created: ${space.name} (#${space.slug})\nJoin code: ${space.join_code}\nShare code with your community.`);
+  return ctx.reply(buildSpaceWelcomeMessage(space, { created: true }));
 });
 
 bot.command('space_join', (ctx) => {
@@ -84,7 +148,7 @@ bot.command('space_join', (ctx) => {
 
   const space = joinSpace(code, ctx.from);
   if (!space) return ctx.reply('Invalid join code.');
-  return ctx.reply(`✅ Joined and switched to #${space.slug}`);
+  return ctx.reply(buildSpaceWelcomeMessage(space));
 });
 
 bot.command('spaces', (ctx) => {
