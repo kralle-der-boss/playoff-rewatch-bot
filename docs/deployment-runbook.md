@@ -16,7 +16,7 @@
    - `SERVICE_NAME`
    - `TF_STATE_BUCKET`
    - `TF_LOCK_TABLE`
-   - optional: `IMAGE_TAG`, `DESIRED_COUNT`
+   - optional: `DESIRED_COUNT`
 5. In GitHub environment secrets set:
    - `AWS_ROLE_ARN`
    - `TELEGRAM_BOT_TOKEN`
@@ -44,12 +44,18 @@ terraform apply
 ```
 
 ## CI apply flow
-1. Merge infra/app changes to `main`.
-2. Run **terraform-apply** workflow manually.
-3. Select `test` or `prod` environment.
-4. GitHub environment protection (reviewers) gates apply if enabled.
+1. Merge app or infra changes to `main`.
+2. GitHub Actions runs **terraform-apply** automatically for `prod`.
+3. The workflow builds a container image tagged with the commit SHA, pushes it to ECR, and applies Terraform with that exact `image_tag`.
+4. GitHub environment protection (reviewers) still gates the deploy if enabled.
+
+## Manual deploy and rollback
+1. Open **terraform-apply** in GitHub Actions.
+2. Select `test` or `prod`.
+3. Leave `image_tag` empty to build and deploy the selected ref.
+4. Set `image_tag` to a previously pushed SHA tag to redeploy an older image without rebuilding.
 
 ## Rollback basics
 - Infra rollback: checkout previous commit and re-run `terraform-apply`.
-- App rollback: redeploy previous `IMAGE_TAG` and re-run apply.
+- App rollback: rerun `terraform-apply` with a previously shipped `image_tag`.
 - Emergency stop: set `DESIRED_COUNT=0` and apply.

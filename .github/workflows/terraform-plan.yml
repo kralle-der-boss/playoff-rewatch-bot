@@ -51,6 +51,6 @@ jobs:
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
           TF_VAR_name: ${{ vars.SERVICE_NAME }}
           TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TF_VAR_image_tag: ${{ vars.IMAGE_TAG || 'latest' }}
+          TF_VAR_image_tag: plan-preview
           TF_VAR_desired_count: ${{ vars.DESIRED_COUNT || 1 }}
         run: terraform -chdir=infra/terraform/environments/${{ matrix.env }} plan -out=tfplan

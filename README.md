@@ -69,7 +69,14 @@ Each environment uses S3 backend + DynamoDB lock pattern via `backend.hcl`.
 
 - `.github/workflows/ci.yml` → test + lint
 - `.github/workflows/terraform-plan.yml` → fmt/validate/plan (OIDC)
-- `.github/workflows/terraform-apply.yml` → manual apply (OIDC)
+- `.github/workflows/terraform-apply.yml` → build image, push to ECR, and deploy to ECS
+
+Deploy behavior:
+
+- pushes to `main` automatically deploy `prod`
+- manual `terraform-apply` runs can deploy `test` or `prod`
+- each deploy uses an immutable image tag based on the commit SHA
+- manual rollback is done by rerunning `terraform-apply` with an existing `image_tag`
 
 No long-lived AWS keys are stored in this repository.
 
@@ -78,7 +85,7 @@ No long-lived AWS keys are stored in this repository.
 Set GitHub environment vars/secrets per env (`test`, `prod`):
 
 - Vars: `AWS_REGION`, `SERVICE_NAME`, `TF_STATE_BUCKET`, `TF_LOCK_TABLE`
-- Optional vars: `IMAGE_TAG`, `DESIRED_COUNT`
+- Optional vars: `DESIRED_COUNT`
 - Secrets: `AWS_ROLE_ARN`, `TELEGRAM_BOT_TOKEN`
 
 See `docs/deployment-runbook.md` for bootstrap and rollback.
