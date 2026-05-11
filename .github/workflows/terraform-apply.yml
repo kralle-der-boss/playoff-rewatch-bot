@@ -1,6 +1,16 @@
 name: terraform-apply
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/terraform-apply.yml'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'src/**'
+      - 'infra/terraform/**'
   workflow_dispatch:
     inputs:
       environment:
@@ -8,39 +18,85 @@ on:
         required: true
         type: choice
         options: [test, prod]
+        default: prod
+      image_tag:
+        description: 'Optional existing image tag to deploy. Leave empty to build and deploy this commit.'
+        required: false
+        type: string
 
 permissions:
   id-token: write
   contents: read
 
+concurrency:
+  group: terraform-apply-${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'prod' }}
+  cancel-in-progress: false
+
 jobs:
   apply:
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment || 'prod' }}
     steps:
       - uses: actions/checkout@v4
+      - name: Resolve deploy settings
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            DEPLOY_ENV="${{ inputs.environment }}"
+            IMAGE_TAG="${{ inputs.image_tag }}"
+          else
+            DEPLOY_ENV="prod"
+            IMAGE_TAG=""
+          fi
+
+          if [ -z "$IMAGE_TAG" ]; then
+            IMAGE_TAG="${GITHUB_SHA}"
+            BUILD_IMAGE="true"
+          else
+            BUILD_IMAGE="false"
+          fi
+
+          echo "DEPLOY_ENV=$DEPLOY_ENV" >> "$GITHUB_ENV"
+          echo "IMAGE_TAG=$IMAGE_TAG" >> "$GITHUB_ENV"
+          echo "BUILD_IMAGE=$BUILD_IMAGE" >> "$GITHUB_ENV"
+
       - uses: hashicorp/setup-terraform@v3
       - name: Configure AWS credentials (OIDC)
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
+      - name: Resolve ECR repository URL
+        shell: bash
+        run: |
+          ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+          echo "ECR_REPOSITORY_URL=${ACCOUNT_ID}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ vars.SERVICE_NAME }}" >> "$GITHUB_ENV"
+      - name: Login to Amazon ECR
+        if: env.BUILD_IMAGE == 'true'
+        uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push app image
+        if: env.BUILD_IMAGE == 'true'
+        shell: bash
+        run: |
+          docker build --pull -t "$ECR_REPOSITORY_URL:$IMAGE_TAG" -t "$ECR_REPOSITORY_URL:latest" .
+          docker push "$ECR_REPOSITORY_URL:$IMAGE_TAG"
+          docker push "$ECR_REPOSITORY_URL:latest"
       - name: Write backend.hcl
         run: |
-          cat > infra/terraform/environments/${{ inputs.environment }}/backend.hcl <<'EOF'
+          cat > infra/terraform/environments/${DEPLOY_ENV}/backend.hcl <<EOF
           bucket         = "${{ vars.TF_STATE_BUCKET }}"
-          key            = "playoff-rewatch-bot/${{ inputs.environment }}/terraform.tfstate"
+          key            = "playoff-rewatch-bot/${DEPLOY_ENV}/terraform.tfstate"
           region         = "${{ vars.AWS_REGION }}"
           dynamodb_table = "${{ vars.TF_LOCK_TABLE }}"
           encrypt        = true
           EOF
       - name: Terraform init
-        run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} init -backend-config=backend.hcl
+        run: terraform -chdir=infra/terraform/environments/${DEPLOY_ENV} init -backend-config=backend.hcl
       - name: Terraform apply
         env:
           TF_VAR_aws_region: ${{ vars.AWS_REGION }}
           TF_VAR_name: ${{ vars.SERVICE_NAME }}
           TF_VAR_telegram_bot_token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TF_VAR_image_tag: ${{ vars.IMAGE_TAG || 'latest' }}
+          TF_VAR_image_tag: ${{ env.IMAGE_TAG }}
           TF_VAR_desired_count: ${{ vars.DESIRED_COUNT || 1 }}
-        run: terraform -chdir=infra/terraform/environments/${{ inputs.environment }} apply -auto-approve
+        run: terraform -chdir=infra/terraform/environments/${DEPLOY_ENV} apply -auto-approve
