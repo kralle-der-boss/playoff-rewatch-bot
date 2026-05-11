@@ -3,12 +3,9 @@ function toYmd(date) {
   return d.toISOString().slice(0, 10);
 }
 
-function toEspnDate(date) {
-  return toYmd(date).replaceAll('-', '');
-}
-
 async function fetchDailyPlayoffGames(date = new Date()) {
-  const espnDate = toEspnDate(date);
+  const scoreboardDate = toYmd(date);
+  const espnDate = scoreboardDate.replaceAll('-', '');
   const url = `https://site.api.espn.com/apis/site/v2/sports/basketball/nba/scoreboard?dates=${espnDate}`;
 
   const res = await fetch(url, { headers: { 'User-Agent': 'playoff-rewatch-bot/0.1' } });
@@ -30,7 +27,7 @@ async function fetchDailyPlayoffGames(date = new Date()) {
 
       return {
         id: String(e.id),
-        game_date: toYmd(e.date),
+        game_date: scoreboardDate,
         starts_at: e.date,
         home_team: home?.team?.displayName || 'Home',
         away_team: away?.team?.displayName || 'Away',
